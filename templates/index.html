@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediTrack – Smart Medicine Inventory Monitoring System</title>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome 6 Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js 4 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="brand-logo">
+                    <div class="logo-icon">
+                        <i class="fa-solid fa-staff-snake"></i>
+                    </div>
+                    <div class="brand-text">
+                        <h2>MediTrack</h2>
+                        <span class="brand-badge">Clinic Edition</span>
+                    </div>
+                </div>
+                <button class="sidebar-toggle-btn" id="sidebarToggle" aria-label="Toggle Sidebar">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section-label">CORE MONITORING</div>
+                <a href="#dashboard" class="nav-item active" data-view="dashboard">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#medicines" class="nav-item" data-view="medicines">
+                    <i class="fa-solid fa-pills"></i>
+                    <span>Medicine Inventory</span>
+                    <span class="nav-counter" id="navMedCount">-</span>
+                </a>
+                <a href="#batches" class="nav-item" data-view="batches">
+                    <i class="fa-solid fa-boxes-stacked"></i>
+                    <span>Batch Tracking</span>
+                </a>
+
+                <div class="nav-section-label">SAFETY & ALERTS</div>
+                <a href="#expiry-alerts" class="nav-item alert-link" data-view="expiry-alerts">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>Expiry Alerts</span>
+                    <span class="nav-badge badge-warning" id="navExpiringCount">0</span>
+                </a>
+                <a href="#low-stock" class="nav-item alert-link" data-view="low-stock">
+                    <i class="fa-solid fa-arrow-trend-down"></i>
+                    <span>Low Stock Alerts</span>
+                    <span class="nav-badge badge-danger" id="navLowStockCount">0</span>
+                </a>
+
+                <div class="nav-section-label">INTELLIGENCE</div>
+                <a href="#predictions" class="nav-item" data-view="predictions">
+                    <i class="fa-solid fa-brain"></i>
+                    <span>Shortage Prediction</span>
+                    <span class="nav-pulse-dot" title="Predictive AI Active"></span>
+                </a>
+                <a href="#consumption" class="nav-item" data-view="consumption">
+                    <i class="fa-solid fa-clipboard-list"></i>
+                    <span>Dispense History</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="system-health-card">
+                    <div class="status-indicator online"></div>
+                    <div class="health-meta">
+                        <span class="health-title">System Active</span>
+                        <span class="health-subtitle" id="currentDateDisplay">Today</span>
+                    </div>
+                </div>
+                <button class="btn btn-secondary btn-sm btn-block" id="btnResetSampleData" title="Reload clean clinic sample data">
+                    <i class="fa-solid fa-rotate-right"></i> Reset Sample Data
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Top Navigation Header -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <button class="mobile-menu-btn" id="mobileMenuBtn">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <div class="page-title-group">
+                        <h1 id="pageTitle">Dashboard Overview</h1>
+                        <p id="pageSubtitle">Real-time inventory levels, safety alerts & analytics</p>
+                    </div>
+                </div>
+
+                <div class="topbar-right">
+                    <!-- Quick Search Bar -->
+                    <div class="global-search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="globalSearchInput" placeholder="Quick search medicine, category, batch...">
+                    </div>
+
+                    <!-- Quick Action Buttons -->
+                    <div class="topbar-actions">
+                        <button class="btn btn-outline" id="btnDispenseQuick">
+                            <i class="fa-solid fa-hand-holding-medical"></i> Dispense
+                        </button>
+                        <button class="btn btn-outline" id="btnAddBatchQuick">
+                            <i class="fa-solid fa-plus"></i> New Batch
+                        </button>
+                        <button class="btn btn-primary" id="btnAddMedicineQuick">
+                            <i class="fa-solid fa-prescription-bottle-medical"></i> Add Medicine
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Banner Notice for Expired Stock Rule -->
+            <div class="compliance-banner">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span><strong>Clinical Safety Rule:</strong> Expired batches are automatically excluded from usable stock calculations and dispensing workflows.</span>
+            </div>
+
+            <!-- View 1: DASHBOARD -->
+            <section class="content-view active" id="view-dashboard">
+                <!-- KPI Stat Cards Row -->
+                <div class="kpi-grid">
+                    <div class="kpi-card card-blue">
+                        <div class="kpi-icon"><i class="fa-solid fa-capsules"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Total Medicines</span>
+                            <h3 class="kpi-value" id="kpiTotalMedicines">-</h3>
+                            <span class="kpi-sub">Across all categories</span>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card card-teal">
+                        <div class="kpi-icon"><i class="fa-solid fa-cubes-stacked"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Available Usable Stock</span>
+                            <h3 class="kpi-value" id="kpiUsableStock">-</h3>
+                            <span class="kpi-sub"><i class="fa-solid fa-check"></i> Safe & active units</span>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card card-amber">
+                        <div class="kpi-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Expiring Soon (30d)</span>
+                            <h3 class="kpi-value" id="kpiExpiringSoon">-</h3>
+                            <span class="kpi-sub" id="kpiExpiringSub">Batches need priority use</span>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card card-red">
+                        <div class="kpi-icon"><i class="fa-solid fa-ban"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Expired Batches</span>
+                            <h3 class="kpi-value" id="kpiExpiredBatches">-</h3>
+                            <span class="kpi-sub" id="kpiExpiredUnits">Units strictly quarantined</span>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card card-orange">
+                        <div class="kpi-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Low Stock Medicines</span>
+                            <h3 class="kpi-value" id="kpiLowStock">-</h3>
+                            <span class="kpi-sub" id="kpiOutOfStockCount">Below safe minimum</span>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card card-purple">
+                        <div class="kpi-icon"><i class="fa-solid fa-chart-line-down"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Shortage Risk (&le;7d)</span>
+                            <h3 class="kpi-value" id="kpiCriticalShortages">-</h3>
+                            <span class="kpi-sub">Based on 30d usage</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Charts Row -->
+                <div class="charts-grid">
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-chart-pie"></i>
+                                <span>Usable Stock by Category</span>
+                            </div>
+                            <span class="card-badge">Live Balance</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-chart-column"></i>
+                                <span>Stock Level vs Minimum Level</span>
+                            </div>
+                            <span class="card-badge">Safety Threshold</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="stockComparisonChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-shield-heart"></i>
+                                <span>Batch Expiry Health</span>
+                            </div>
+                            <span class="card-badge">Safety Ratio</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="expiryHealthChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Urgent Attention Preview Row -->
+                <div class="dashboard-tables-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-clock-rotate-left text-warning"></i>
+                                <span>Urgent Expiry Watchlist (&le; 30 Days)</span>
+                            </div>
+                            <a href="#expiry-alerts" class="card-link" onclick="navigateView('expiry-alerts')">View All</a>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table" id="dashboardExpiryTable">
+                                <thead>
+                                    <tr>
+                                        <th>Medicine</th>
+                                        <th>Batch #</th>
+                                        <th>Qty</th>
+                                        <th>Expiry Date</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="5" class="text-center text-muted">Loading expiry alerts...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-triangle-exclamation text-danger"></i>
+                                <span>Low Stock & Shortage Alerts</span>
+                            </div>
+                            <a href="#low-stock" class="card-link" onclick="navigateView('low-stock')">View All</a>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table" id="dashboardLowStockTable">
+                                <thead>
+                                    <tr>
+                                        <th>Medicine</th>
+                                        <th>Usable Stock</th>
+                                        <th>Min Level</th>
+                                        <th>Deficit</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="5" class="text-center text-muted">Loading low stock data...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View 2: MEDICINE INVENTORY -->
+            <section class="content-view" id="view-medicines">
+                <div class="card">
+                    <div class="table-toolbar">
+                        <div class="toolbar-search">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="medicineSearchInput" placeholder="Search medicine name, category...">
+                        </div>
+                        <div class="toolbar-filters">
+                            <select id="categoryFilter" class="form-control select-control">
+                                <option value="">All Categories</option>
+                            </select>
+                            <select id="stockStatusFilter" class="form-control select-control">
+                                <option value="">All Stock Statuses</option>
+                                <option value="IN_STOCK">In Stock</option>
+                                <option value="LOW_STOCK">Low Stock</option>
+                                <option value="OUT_OF_STOCK">Out of Stock</option>
+                            </select>
+                            <button class="btn btn-primary" id="btnAddMedicineModalOpen">
+                                <i class="fa-solid fa-plus"></i> Add Medicine
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="data-table" id="medicinesTable">
+                            <thead>
+                                <tr>
+                                    <th>Medicine Name</th>
+                                    <th>Category</th>
+                                    <th>Unit</th>
+                                    <th>Usable Stock</th>
+                                    <th>Min Stock</th>
+                                    <th>Stock Status</th>
+                                    <th>Batches</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="8" class="text-center text-muted">Loading medicines...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View 3: BATCH MANAGEMENT -->
+            <section class="content-view" id="view-batches">
+                <div class="card">
+                    <div class="table-toolbar">
+                        <div class="toolbar-search">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="batchSearchInput" placeholder="Search batch number, medicine, supplier...">
+                        </div>
+                        <div class="toolbar-filters">
+                            <select id="batchExpiryFilter" class="form-control select-control">
+                                <option value="">All Expiry Statuses</option>
+                                <option value="GOOD">Safe / Good (>30d)</option>
+                                <option value="EXPIRING_SOON">Expiring Soon (&le;30d)</option>
+                                <option value="EXPIRED">Expired</option>
+                            </select>
+                            <button class="btn btn-primary" id="btnAddBatchModalOpen">
+                                <i class="fa-solid fa-plus"></i> Add New Batch
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="data-table" id="batchesTable">
+                            <thead>
+                                <tr>
+                                    <th>Batch #</th>
+                                    <th>Medicine</th>
+                                    <th>Quantity</th>
+                                    <th>Expiry Date</th>
+                                    <th>Days Remaining</th>
+                                    <th>Expiry Status</th>
+                                    <th>Supplier</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="8" class="text-center text-muted">Loading batch list...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View 4: EXPIRY ALERTS -->
+            <section class="content-view" id="view-expiry-alerts">
+                <div class="alert-summary-cards">
+                    <div class="alert-banner-card warning">
+                        <div class="alert-banner-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                        <div class="alert-banner-content">
+                            <h4>Expiring Soon (Within 30 Days)</h4>
+                            <p><span id="alertExpiringCount">0</span> batch(es) nearing expiration. Recommend dispensing via FEFO (First-Expiring-First-Out).</p>
+                        </div>
+                    </div>
+
+                    <div class="alert-banner-card danger">
+                        <div class="alert-banner-icon"><i class="fa-solid fa-ban"></i></div>
+                        <div class="alert-banner-content">
+                            <h4>Expired Batches (Quarantined)</h4>
+                            <p><span id="alertExpiredCount">0</span> batch(es) have expired. Strictly non-usable. Quarantine or dispose immediately.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expiring Soon Table -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fa-solid fa-clock-rotate-left text-warning"></i>
+                            <span>Medicines Expiring Within 30 Days</span>
+                        </div>
+                        <span class="badge badge-warning" id="expiringSoonTableBadge">0 Items</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="expiringSoonTable">
+                            <thead>
+                                <tr>
+                                    <th>Medicine Name</th>
+                                    <th>Batch #</th>
+                                    <th>Quantity</th>
+                                    <th>Expiry Date</th>
+                                    <th>Time Until Expiry</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="7" class="text-center text-muted">No medicines expiring soon.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Expired Table (Displayed separately as required) -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fa-solid fa-circle-xmark text-danger"></i>
+                            <span>Expired Medicines & Batches (Non-Usable Stock)</span>
+                        </div>
+                        <span class="badge badge-danger" id="expiredTableBadge">0 Items</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="expiredTable">
+                            <thead>
+                                <tr>
+                                    <th>Medicine Name</th>
+                                    <th>Batch #</th>
+                                    <th>Quarantined Qty</th>
+                                    <th>Expiry Date</th>
+                                    <th>Expired Since</th>
+                                    <th>Supplier</th>
+                                    <th>Disposal Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="7" class="text-center text-muted">No expired medicines recorded.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View 5: LOW STOCK ALERTS -->
+            <section class="content-view" id="view-low-stock">
+                <div class="alert-summary-cards">
+                    <div class="alert-banner-card danger">
+                        <div class="alert-banner-icon"><i class="fa-solid fa-circle-exclamation"></i></div>
+                        <div class="alert-banner-content">
+                            <h4>Completely Out of Usable Stock</h4>
+                            <p><span id="outOfStockBannerCount">0</span> medicine(s) have 0 usable units available in clinic storage.</p>
+                        </div>
+                    </div>
+                    <div class="alert-banner-card warning">
+                        <div class="alert-banner-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
+                        <div class="alert-banner-content">
+                            <h4>Low Stock Level Warnings</h4>
+                            <p><span id="lowStockBannerCount">0</span> medicine(s) have usable units below configured minimum threshold.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Completely Out of Stock -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fa-solid fa-ban text-danger"></i>
+                            <span>Out of Stock Medicines (Usable Stock = 0)</span>
+                        </div>
+                        <span class="badge badge-danger" id="outOfStockTableBadge">0 Items</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="outOfStockTable">
+                            <thead>
+                                <tr>
+                                    <th>Medicine</th>
+                                    <th>Category</th>
+                                    <th>Usable Stock</th>
+                                    <th>Minimum Level</th>
+                                    <th>Deficit Units</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="6" class="text-center text-muted">No medicines currently out of stock.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Low Stock Below Threshold -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fa-solid fa-triangle-exclamation text-warning"></i>
+                            <span>Low Stock Medicines (Below Minimum Threshold)</span>
+                        </div>
+                        <span class="badge badge-warning" id="lowStockTableBadge">0 Items</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="lowStockTable">
+                            <thead>
+                                <tr>
+                                    <th>Medicine</th>
+                                    <th>Category</th>
+                                    <th>Usable Stock</th>
+                                    <th>Minimum Level</th>
+                                    <th>Stock Capacity</th>
+                                    <th>Deficit Units</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="7" class="text-center text-muted">All medicines are above minimum stock levels.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View 6: SHORTAGE PREDICTION -->
+            <section class="content-view" id="view-predictions">
+                <div class="card mb-4 prediction-hero-card">
+                    <div class="prediction-hero-body">
+                        <div class="prediction-hero-text">
+                            <h3><i class="fa-solid fa-brain"></i> Smart Stock Runout & Shortage Predictor</h3>
+                            <p>Analyzes 30-day historical clinic consumption patterns to compute average daily consumption rates and forecast exact days until medicine stock depletion.</p>
+                        </div>
+                        <div class="prediction-stats">
+                            <div class="stat-pill danger">
+                                <span class="val" id="predCriticalCount">0</span>
+                                <span class="lbl">&le; 7 Days (Critical)</span>
+                            </div>
+                            <div class="stat-pill warning">
+                                <span class="val" id="predModerateCount">0</span>
+                                <span class="lbl">8 - 15 Days (Warning)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fa-solid fa-calculator"></i>
+                            <span>Runout Forecasts & Reorder Recommendations</span>
+                        </div>
+                        <span class="card-badge">FEFO & Consumption Model</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="predictionsTable">
+                            <thead>
+                                <tr>
+                                    <th>Medicine Name</th>
+                                    <th>Usable Stock</th>
+                                    <th>30d Consumption</th>
+                                    <th>Avg Daily Usage</th>
+                                    <th>Days Until Stockout</th>
+                                    <th>Shortage Risk Level</th>
+                                    <th>Suggested Reorder</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="8" class="text-center text-muted">Calculating consumption predictions...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View 7: CONSUMPTION & DISPENSE LOGS -->
+            <section class="content-view" id="view-consumption">
+                <div class="card">
+                    <div class="table-toolbar">
+                        <div class="toolbar-title">
+                            <h3><i class="fa-solid fa-clipboard-list"></i> Clinical Dispensing Audit Trail</h3>
+                            <p>History of medicines dispensed to outpatient clinics and emergency cases</p>
+                        </div>
+                        <button class="btn btn-primary" id="btnDispenseModalOpen">
+                            <i class="fa-solid fa-hand-holding-medical"></i> Dispense Medicine
+                        </button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="data-table" id="consumptionTable">
+                            <thead>
+                                <tr>
+                                    <th>Log ID</th>
+                                    <th>Dispensed Date</th>
+                                    <th>Medicine Name</th>
+                                    <th>Batch #</th>
+                                    <th>Quantity Used</th>
+                                    <th>Recipient / Purpose</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="6" class="text-center text-muted">Loading audit records...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL 1: ADD / EDIT MEDICINE                             -->
+    <!-- ======================================================== -->
+    <div class="modal-backdrop" id="medicineModal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 id="medicineModalTitle"><i class="fa-solid fa-pills"></i> Add New Medicine</h3>
+                <button class="modal-close" data-modal="medicineModal">&times;</button>
+            </div>
+            <form id="medicineForm">
+                <input type="hidden" id="medFormId">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="medFormName">Medicine Name <span class="required">*</span></label>
+                        <input type="text" id="medFormName" class="form-control" placeholder="e.g. Paracetamol 500mg" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-half">
+                            <label for="medFormCategory">Category <span class="required">*</span></label>
+                            <input type="text" id="medFormCategory" class="form-control" placeholder="e.g. Analgesic, Antibiotic" required list="categorySuggestions">
+                            <datalist id="categorySuggestions">
+                                <option value="Analgesic & Antipyretic">
+                                <option value="Antibiotic">
+                                <option value="Antidiabetic">
+                                <option value="Cardiovascular">
+                                <option value="Gastrointestinal">
+                                <option value="Antihistamine">
+                                <option value="Respiratory">
+                                <option value="NSAID">
+                                <option value="Electrolyte">
+                                <option value="Dermatological">
+                            </datalist>
+                        </div>
+                        <div class="form-group col-half">
+                            <label for="medFormUnit">Dispensing Unit <span class="required">*</span></label>
+                            <select id="medFormUnit" class="form-control">
+                                <option value="Tablets">Tablets</option>
+                                <option value="Capsules">Capsules</option>
+                                <option value="Bottles">Bottles</option>
+                                <option value="Strips">Strips</option>
+                                <option value="Inhalers">Inhalers</option>
+                                <option value="Sachets">Sachets</option>
+                                <option value="Vials">Vials</option>
+                                <option value="Ampoules">Ampoules</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="medFormMinStock">Minimum Stock Level <span class="required">*</span></label>
+                        <input type="number" id="medFormMinStock" class="form-control" min="0" value="20" required>
+                        <small class="form-text">System alerts when usable stock drops below this number.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="medFormDesc">Description / Clinical Notes</label>
+                        <textarea id="medFormDesc" class="form-control" rows="3" placeholder="Indications, dosage recommendations, storage requirements..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-modal="medicineModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btnSaveMedicine">
+                        <i class="fa-solid fa-check"></i> Save Medicine
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL 2: ADD / EDIT BATCH                                -->
+    <!-- ======================================================== -->
+    <div class="modal-backdrop" id="batchModal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 id="batchModalTitle"><i class="fa-solid fa-boxes-stacked"></i> Add Medicine Batch</h3>
+                <button class="modal-close" data-modal="batchModal">&times;</button>
+            </div>
+            <form id="batchForm">
+                <input type="hidden" id="batchFormId">
+                <div class="modal-body">
+                    <div class="form-group" id="batchMedSelectGroup">
+                        <label for="batchFormMedId">Medicine <span class="required">*</span></label>
+                        <select id="batchFormMedId" class="form-control" required>
+                            <option value="">Select Medicine...</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-half">
+                            <label for="batchFormNumber">Batch Number <span class="required">*</span></label>
+                            <input type="text" id="batchFormNumber" class="form-control" placeholder="e.g. BATCH-2024-01" required>
+                        </div>
+                        <div class="form-group col-half">
+                            <label for="batchFormQuantity">Batch Quantity <span class="required">*</span></label>
+                            <input type="number" id="batchFormQuantity" class="form-control" min="1" placeholder="Units received" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-half">
+                            <label for="batchFormExpiry">Expiry Date <span class="required">*</span></label>
+                            <input type="date" id="batchFormExpiry" class="form-control" required>
+                            <small class="form-text">Batches expiring within 30 days are automatically flagged.</small>
+                        </div>
+                        <div class="form-group col-half">
+                            <label for="batchFormReceived">Received Date</label>
+                            <input type="date" id="batchFormReceived" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-half">
+                            <label for="batchFormSupplier">Supplier / Manufacturer</label>
+                            <input type="text" id="batchFormSupplier" class="form-control" placeholder="e.g. Apex Pharma">
+                        </div>
+                        <div class="form-group col-half">
+                            <label for="batchFormUnitCost">Unit Cost ($)</label>
+                            <input type="number" id="batchFormUnitCost" class="form-control" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="batchFormNotes">Storage / Batch Notes</label>
+                        <input type="text" id="batchFormNotes" class="form-control" placeholder="e.g. Shelf A-3, Keep refrigerated">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-modal="batchModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btnSaveBatch">
+                        <i class="fa-solid fa-check"></i> Save Batch
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL 3: DISPENSE / RECORD USAGE                         -->
+    <!-- ======================================================== -->
+    <div class="modal-backdrop" id="dispenseModal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-hand-holding-medical"></i> Dispense Medicine</h3>
+                <button class="modal-close" data-modal="dispenseModal">&times;</button>
+            </div>
+            <form id="dispenseForm">
+                <div class="modal-body">
+                    <div class="alert-info-box">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <span>Dispensing automatically selects batches using <strong>FEFO</strong> (First-Expiring-First-Out) to prevent medicine waste. Expired batches cannot be dispensed.</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="dispenseMedId">Medicine to Dispense <span class="required">*</span></label>
+                        <select id="dispenseMedId" class="form-control" required>
+                            <option value="">Select medicine...</option>
+                        </select>
+                    </div>
+                    <div id="dispenseStockInfo" class="stock-info-preview" style="display:none;">
+                        <span class="preview-label">Usable Available Stock:</span>
+                        <span class="preview-val" id="dispenseAvailableVal">0</span>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-half">
+                            <label for="dispenseQuantity">Quantity to Dispense <span class="required">*</span></label>
+                            <input type="number" id="dispenseQuantity" class="form-control" min="1" placeholder="Number of units" required>
+                        </div>
+                        <div class="form-group col-half">
+                            <label for="dispenseBatchId">Specific Batch (Optional)</label>
+                            <select id="dispenseBatchId" class="form-control">
+                                <option value="">Auto FEFO (Earliest Expiring)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="dispenseRecipient">Dispensed To / Reason <span class="required">*</span></label>
+                        <input type="text" id="dispenseRecipient" class="form-control" placeholder="e.g. Outpatient Clinic, Prescription #1084, Emergency Unit" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="dispenseDate">Dispense Date</label>
+                        <input type="date" id="dispenseDate" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-modal="dispenseModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btnConfirmDispense">
+                        <i class="fa-solid fa-check"></i> Confirm Dispense
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL 4: MEDICINE DETAILS & BATCHES DRILLDOWN             -->
+    <!-- ======================================================== -->
+    <div class="modal-backdrop" id="medDetailsModal">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-header">
+                <h3 id="medDetailsTitle"><i class="fa-solid fa-file-medical"></i> Medicine Information</h3>
+                <button class="modal-close" data-modal="medDetailsModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="med-overview-grid">
+                    <div class="med-detail-item">
+                        <span class="lbl">Category</span>
+                        <span class="val" id="detailCategory">-</span>
+                    </div>
+                    <div class="med-detail-item">
+                        <span class="lbl">Dispensing Unit</span>
+                        <span class="val" id="detailUnit">-</span>
+                    </div>
+                    <div class="med-detail-item">
+                        <span class="lbl">Usable Stock</span>
+                        <span class="val text-success" id="detailUsable">-</span>
+                    </div>
+                    <div class="med-detail-item">
+                        <span class="lbl">Expired Stock (Quarantined)</span>
+                        <span class="val text-danger" id="detailExpired">-</span>
+                    </div>
+                    <div class="med-detail-item">
+                        <span class="lbl">Minimum Stock Threshold</span>
+                        <span class="val" id="detailMinStock">-</span>
+                    </div>
+                    <div class="med-detail-item">
+                        <span class="lbl">Description</span>
+                        <span class="val" id="detailDescription">-</span>
+                    </div>
+                </div>
+
+                <div class="detail-batches-section">
+                    <div class="section-title-bar">
+                        <h4>Associated Batches</h4>
+                        <button class="btn btn-sm btn-outline" id="btnQuickAddBatchForMed">
+                            <i class="fa-solid fa-plus"></i> Add Batch for this Medicine
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="medDetailBatchesTable">
+                            <thead>
+                                <tr>
+                                    <th>Batch #</th>
+                                    <th>Quantity</th>
+                                    <th>Expiry Date</th>
+                                    <th>Days Left</th>
+                                    <th>Status</th>
+                                    <th>Supplier</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="7" class="text-center text-muted">No batches recorded.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-modal="medDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Toast Notification System -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Application JavaScript Files -->
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
